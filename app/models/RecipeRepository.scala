@@ -1,10 +1,14 @@
 package models
 
 import javax.inject._
-
-import play.api.Logger
+import org.joda.time.DateTime
 
 import scala.concurrent.{ExecutionContext, Future}
+
+import play.api.Logger
+import play.api.db.DBApi
+
+import anorm._
 
 case class Recipe(
   id: Option[Long],
@@ -14,8 +18,8 @@ case class Recipe(
   ingredients: String,
   cost: Long,
   // TODO: timestamps should be DateTimes.
-  created_at: Option[String],
-  updated_at: Option[String]
+  created_at: Option[DateTime],
+  updated_at: Option[DateTime]
 )
 
 trait RecipeRepository {
@@ -23,6 +27,39 @@ trait RecipeRepository {
   def list(): Future[Iterable[Recipe]]
   def get(id: Long) : Future[Option[Recipe]]
   // TODO: delete(id: Long)
+}
+
+@Singleton
+class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExecutionContext) extends RecipeRepository {
+  private val db = dbapi.database("default")
+
+  override def create(recipe: Recipe): Future[Long] = {
+    Future {
+      if (db.withConnection { implicit connection =>
+        SQL("Select 1").execute()
+      }) {
+        1
+      } else {
+        0
+      }
+    }
+  }
+  override def list(): Future[Iterable[Recipe]] = {
+    Future {
+      Seq()
+    }
+  }
+  override def get(id: Long): Future[Option[Recipe]] = {
+    Future {
+      db.withConnection {
+        implicit connection => {
+          val parser: RowParser[Recipe] = Macro.namedParser[Recipe]
+          val result: List[Recipe] = SQL"SELECT * FROM recipes WHERE id = $id".as(parser.*)
+          result.headOption
+        }
+      }
+    }
+  }
 }
 
 @Singleton
@@ -37,8 +74,8 @@ class InMemoryRecipeRepository @Inject()()(implicit ec: ExecutionContext) extend
       "4 people",
       "onion, chicken, seasoning",
       1000,
-      Some("2016-01-10 12:10:12"),
-      Some("2016-01-10 12:10:12")
+      None,
+      None
     ),
     Recipe(
       Some(2),
@@ -47,8 +84,8 @@ class InMemoryRecipeRepository @Inject()()(implicit ec: ExecutionContext) extend
       "2 people",
       "onion, egg, seasoning, soy sauce",
       700,
-      Some("2016-01-11 13:10:12"),
-      Some("2016-01-11 13:10:12")
+      None,
+      None
     )
   )
 

@@ -6,6 +6,9 @@ import play.api._
 import play.api.libs.json._
 import play.api.mvc._
 
+import org.joda.time.DateTime
+import org.joda.time.format.DateTimeFormat
+
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -13,13 +16,25 @@ import scala.concurrent.{ExecutionContext, Future}
  * application's home page.
  */
 @Singleton
-class RecipesController @Inject()(recipeService: models.RecipeRepository)(val controllerComponents: ControllerComponents)
+class RecipesController @Inject()(recipeService: models.RecipeRepository, 
+                                  val controllerComponents: ControllerComponents)(implicit ec: ExecutionContext)
     extends BaseController {
   val logger = Logger(this.getClass())
 
-  // TODO: Should we define our own EC instead?
-  implicit val ec: ExecutionContext = ExecutionContext.global
-
+  implicit val dateTimeReads = new Format[DateTime] {
+    def writes(dt: DateTime): JsValue =
+      JsString(DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss").print(dt))
+    def reads(json: JsValue): JsResult[DateTime] = json match {
+      case JsString(s) => 
+        JsSuccess(DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss").parseDateTime(s))
+      case js => JsError(
+        Seq(
+          JsPath ->
+            Seq(JsonValidationError("error.expected.date.isoformat", js))
+        )
+      )
+    }
+  }
   implicit val recipeReads = Json.reads[models.Recipe]
   implicit val recipeWrites = Json.writes[models.Recipe]
 
@@ -27,8 +42,8 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository)(val co
     _.validate[A].asEither.left.map(e => BadRequest(JsError.toJson(e)))
   )
 
-  def createRecipe() = Action(validateJson[models.Recipe]) { request =>
-    Ok("Got: " + request.body.id)
+  def createRecipe() = Action.async(validateJson[models.Recipe]) { request =>
+    recipeService.create(request.body).map(id => Ok(Json.toJson(id).toString()))
   }
 
   def listRecipes() = Action.async {
