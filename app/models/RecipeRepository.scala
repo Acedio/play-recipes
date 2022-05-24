@@ -13,6 +13,7 @@ case class Recipe(
   serves: String,
   ingredients: String,
   cost: Long,
+  // TODO: timestamps should be DateTimes.
   created_at: Option[String],
   updated_at: Option[String]
 )

@@ -3,15 +3,8 @@
 # https://www.playframework.com/documentation/latest/ScalaRouting
 # ~~~~
 
-# An example controller showing a sample home page
-GET     /                           controllers.HomeController.index()
-
-# Map static resources from the /public folder to the /assets URL path
-GET     /assets/*file               controllers.Assets.versioned(path="/public", file: Asset)
-
-# TODO: Potentially move these to their own `routes` file.
-POST    /recipes                    controllers.HomeController.createRecipe()
-GET     /recipes                    controllers.HomeController.listRecipes()
-GET     /recipes/:id                controllers.HomeController.getRecipe(id: Long)
-PATCH   /recipes/:id                controllers.HomeController.updateRecipe(id: Long)
-DELETE  /recipes/:id                controllers.HomeController.deleteRecipe(id: Long)
+POST    /recipes                    controllers.RecipesController.createRecipe()
+GET     /recipes                    controllers.RecipesController.listRecipes()
+GET     /recipes/:id                controllers.RecipesController.getRecipe(id: Long)
+PATCH   /recipes/:id                controllers.RecipesController.updateRecipe(id: Long)
+DELETE  /recipes/:id                controllers.RecipesController.deleteRecipe(id: Long)

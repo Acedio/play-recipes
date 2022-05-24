@@ -13,25 +13,13 @@ import scala.concurrent.{ExecutionContext, Future}
  * application's home page.
  */
 @Singleton
-class HomeController @Inject()(recipeService: models.RecipeRepository)(val controllerComponents: ControllerComponents)
+class RecipesController @Inject()(recipeService: models.RecipeRepository)(val controllerComponents: ControllerComponents)
     extends BaseController {
   val logger = Logger(this.getClass())
 
-  /**
-   * Create an Action to render an HTML page.
-   *
-   * The configuration in the `routes` file means that this method
-   * will be called when the application receives a `GET` request with
-   * a path of `/`.
-   */
-  def index() = Action { implicit request: Request[AnyContent] =>
-    Ok(views.html.index())
-  }
-
   // TODO: Should we define our own EC instead?
-  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+  implicit val ec: ExecutionContext = ExecutionContext.global
 
-  // TODO: timestamps should be DateTimes.
   implicit val recipeReads = Json.reads[models.Recipe]
   implicit val recipeWrites = Json.writes[models.Recipe]
 
@@ -43,8 +31,8 @@ class HomeController @Inject()(recipeService: models.RecipeRepository)(val contr
     Ok("Got: " + request.body.id)
   }
 
-  def listRecipes() = Action {
-    Ok("these are recipes!")
+  def listRecipes() = Action.async {
+    recipeService.list().map(rs => Ok(Json.toJson(rs).toString()))
   }
 
   def getRecipe(id: Long) = Action.async {
