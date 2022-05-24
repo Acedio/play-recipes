@@ -1,1 +1,1 @@
-web: target/universal/stage/bin/givery-recipes
+web: target/universal/stage/bin/givery-recipes -Dhttp.port=${PORT}
