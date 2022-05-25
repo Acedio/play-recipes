@@ -73,10 +73,7 @@ class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExec
                 "serves" -> recipe.serves,
                 "ingredients" -> recipe.ingredients,
                 "cost" -> recipe.cost)
-            .executeUpdate() match {
-              case 1 => true
-              case _ => false
-            }
+            .executeUpdate() == 1
       }
     }
   }
@@ -85,7 +82,7 @@ class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExec
       db.withConnection {
         implicit connection => {
           val parser: RowParser[Recipe] = Macro.namedParser[Recipe]
-          SQL"SELECT * FROM recipes".as(parser.*)
+          SQL"SELECT id, title, making_time, serves, ingredients, cost, created_at, updated_at FROM recipes".as(parser.*)
         }
       }
     }
@@ -95,7 +92,7 @@ class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExec
       db.withConnection {
         implicit connection => {
           val parser: RowParser[Recipe] = Macro.namedParser[Recipe]
-          val result: List[Recipe] = SQL"SELECT * FROM recipes WHERE id = $id".as(parser.*)
+          val result: List[Recipe] = SQL"SELECT id, title, making_time, serves, ingredients, cost, created_at, updated_at FROM recipes WHERE id = $id".as(parser.*)
           result.headOption
         }
       }
@@ -105,7 +102,7 @@ class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExec
     Future {
       db.withConnection {
         implicit connection => {
-          SQL("DELETE FROM recipes WHERE id = {id}").on("id" -> id).execute()
+          SQL("DELETE FROM recipes WHERE id = {id}").on("id" -> id).executeUpdate() == 1
         }
       }
     }

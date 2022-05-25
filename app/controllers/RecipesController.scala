@@ -42,21 +42,38 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
     _.validate[A].asEither.left.map(e => BadRequest(JsError.toJson(e)))
   )
 
-  def createRecipe() = Action.async(validateJson[models.Recipe]) { request =>
-    recipeService.create(request.body).map(id => Ok(Json.toJson(id).toString()))
+  def createRecipe() = Action.async(validateJson[models.Recipe]) {
+    request => {
+      val id: Future[Long] = recipeService.create(request.body)
+      val recipe: Future[Option[models.Recipe]] = id.flatMap(id => recipeService.get(id))
+      recipe.map(
+        _.map(
+          r => Ok(Json.obj(
+            "message" -> "Recipe successfully created!",
+            "recipe" -> r
+          ).toString())
+        ).getOrElse(InternalServerError)
+      )
+    }
   }
 
   def listRecipes() = Action.async {
-    recipeService.list().map(rs => Ok(Json.toJson(rs).toString()))
+    recipeService.list().map(rs => Ok(Json.obj(
+      "recipes" -> rs
+    ).toString()))
   }
 
   def getRecipe(id: Long) = Action.async {
-    recipeService.get(id).map(_ match {
-        case Some(r) => Ok(Json.toJson(r).toString())
-        case None => NotFound
-      }
+    recipeService.get(id).map(
+      _.map(
+        r => Ok(Json.obj(
+          "message" -> "Recipe details by id",
+          "recipe" -> r
+        ).toString())
+      ).getOrElse(NotFound)
     )
   }
+
   def updateRecipe(id: Long) = Action.async(validateJson[models.Recipe]) { request =>
     recipeService.update(id, request.body).map(_ match {
         case true => Ok("Bupdated!")
@@ -64,10 +81,11 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
       }
     )
   }
+
   def deleteRecipe(id: Long) = Action.async {
     recipeService.delete(id).map(_ match {
-        case true => Ok("Baleeted!")
-        case false => NotFound
+        case true => Ok(Json.obj("message" -> "Recipe successfully removed!"))
+        case false => NotFound(Json.obj("message" -> "No recipe found"))
       }
     )
   }
