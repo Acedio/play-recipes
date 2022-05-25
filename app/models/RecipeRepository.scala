@@ -17,16 +17,16 @@ case class Recipe(
   serves: String,
   ingredients: String,
   cost: Long,
-  // TODO: timestamps should be DateTimes.
   created_at: Option[DateTime],
   updated_at: Option[DateTime]
 )
 
 trait RecipeRepository {
   def create(recipe: Recipe) : Future[Long]
+  def update(id: Long, recipe: Recipe) : Future[Boolean]
   def list(): Future[Iterable[Recipe]]
   def get(id: Long) : Future[Option[Recipe]]
-  // TODO: delete(id: Long)
+  def delete(id: Long) : Future[Boolean]
 }
 
 @Singleton
@@ -35,18 +35,59 @@ class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExec
 
   override def create(recipe: Recipe): Future[Long] = {
     Future {
-      if (db.withConnection { implicit connection =>
-        SQL("Select 1").execute()
-      }) {
-        1
-      } else {
-        0
+      db.withConnection {
+        implicit connection =>
+          SQL(
+            """
+            INSERT INTO recipes(title, making_time, serves, ingredients, cost)
+            VALUES ({title}, {making_time}, {serves}, {ingredients}, {cost})
+            """
+          )
+            .on("title" -> recipe.title,
+                "making_time" -> recipe.making_time,
+                "serves" -> recipe.serves,
+                "ingredients" -> recipe.ingredients,
+                "cost" -> recipe.cost)
+            .executeInsert().getOrElse(-1)
+      }
+    }
+  }
+  override def update(id: Long, recipe: Recipe) : Future[Boolean] = {
+    Future {
+      db.withConnection {
+        implicit connection =>
+          SQL(
+            """
+            UPDATE recipes
+            SET title = {title},
+                making_time = {making_time},
+                serves = {serves},
+                ingredients = {ingredients},
+                cost = {cost}
+            WHERE id = {id}
+            """
+          )
+            .on("id" -> id,
+                "title" -> recipe.title,
+                "making_time" -> recipe.making_time,
+                "serves" -> recipe.serves,
+                "ingredients" -> recipe.ingredients,
+                "cost" -> recipe.cost)
+            .executeUpdate() match {
+              case 1 => true
+              case _ => false
+            }
       }
     }
   }
   override def list(): Future[Iterable[Recipe]] = {
     Future {
-      Seq()
+      db.withConnection {
+        implicit connection => {
+          val parser: RowParser[Recipe] = Macro.namedParser[Recipe]
+          SQL"SELECT * FROM recipes".as(parser.*)
+        }
+      }
     }
   }
   override def get(id: Long): Future[Option[Recipe]] = {
@@ -56,6 +97,15 @@ class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExec
           val parser: RowParser[Recipe] = Macro.namedParser[Recipe]
           val result: List[Recipe] = SQL"SELECT * FROM recipes WHERE id = $id".as(parser.*)
           result.headOption
+        }
+      }
+    }
+  }
+  override def delete(id: Long): Future[Boolean] = {
+    Future {
+      db.withConnection {
+        implicit connection => {
+          SQL("DELETE FROM recipes WHERE id = {id}").on("id" -> id).execute()
         }
       }
     }
@@ -92,6 +142,11 @@ class InMemoryRecipeRepository @Inject()()(implicit ec: ExecutionContext) extend
   override def create(recipe: Recipe): Future[Long] = {
     Future { 1 }
   }
+  override def update(id: Long, recipe: Recipe) : Future[Boolean] = {
+    Future {
+      false
+    }
+  }
   override def list(): Future[Iterable[Recipe]] = {
     Future {
       recipeList
@@ -101,6 +156,11 @@ class InMemoryRecipeRepository @Inject()()(implicit ec: ExecutionContext) extend
     Future {
       logger.info("here!")
       recipeList.find(recipe => recipe.id == Some(id))
+    }
+  }
+  override def delete(id: Long): Future[Boolean] = {
+    Future {
+      false
     }
   }
 }

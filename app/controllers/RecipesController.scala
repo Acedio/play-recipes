@@ -57,6 +57,18 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
       }
     )
   }
-  def updateRecipe(id: Long) = TODO
-  def deleteRecipe(id: Long) = TODO
+  def updateRecipe(id: Long) = Action.async(validateJson[models.Recipe]) { request =>
+    recipeService.update(id, request.body).map(_ match {
+        case true => Ok("Bupdated!")
+        case false => NotFound
+      }
+    )
+  }
+  def deleteRecipe(id: Long) = Action.async {
+    recipeService.delete(id).map(_ match {
+        case true => Ok("Baleeted!")
+        case false => NotFound
+      }
+    )
+  }
 }
