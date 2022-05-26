@@ -66,20 +66,32 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
     r.created_at,
     r.updated_at)
 
-  // TODO: Remove the validateJson because caller expects a 200 response even on
+  // This doesn't use validateJson because caller expects a 200 response even on
   // invalid request.
-  def createRecipe() = Action.async(validateJson[models.Recipe]) {
+  def createRecipe() = Action.async(parse.json) {
     request => {
-      val id: Future[Long] = recipeService.create(request.body)
-      val recipe: Future[Option[models.Recipe]] = id.flatMap(id => recipeService.get(id))
-      recipe.map(
-        _.map(
-          r => Ok(Json.obj(
-            "message" -> "Recipe successfully created!",
-            "recipe" -> List(r)
-          ).toString())
-        ).getOrElse(InternalServerError)
-      )
+      val parsed: Option[models.Recipe] = request.body.asOpt(recipeReads)
+      val recipeOr = parsed.toRight(Ok(
+        Json.obj(
+          "message" -> "Recipe creation failed!",
+          "required" -> "title, making_time, serves, ingredients, cost"
+        ).toString()
+      ))
+      recipeOr match {
+        case Left(resp) => Future.successful(resp)
+        case Right(recipe) => {
+          val id: Future[Long] = recipeService.create(recipe)
+          val createdRecipe: Future[Option[models.Recipe]] = id.flatMap(id => recipeService.get(id))
+          createdRecipe.map(
+            _.map(
+              r => Ok(Json.obj(
+                "message" -> "Recipe successfully created!",
+                "recipe" -> List(r)
+              ).toString())
+            ).getOrElse(InternalServerError)
+          )
+        }
+      }
     }
   }
 
