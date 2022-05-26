@@ -22,11 +22,14 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
   val logger = Logger(this.getClass())
 
   implicit val dateTimeReads = new Format[DateTime] {
+    val DateFormat: String = "yyyy-MM-dd HH:mm:ss"
+
     def writes(dt: DateTime): JsValue =
-      JsString(DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss").print(dt))
+      JsString(DateTimeFormat.forPattern(DateFormat).print(dt))
+
     def reads(json: JsValue): JsResult[DateTime] = json match {
       case JsString(s) => 
-        JsSuccess(DateTimeFormat.forPattern("yyyy-MM-dd HH:mm:ss").parseDateTime(s))
+        JsSuccess(DateTimeFormat.forPattern(DateFormat).parseDateTime(s))
       case js => JsError(
         Seq(
           JsPath ->
@@ -35,6 +38,8 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
       )
     }
   }
+
+  // TODO: Add a converter that drops datetimes.
   implicit val recipeReads = Json.reads[models.Recipe]
   implicit val recipeWrites = Json.writes[models.Recipe]
 
@@ -42,6 +47,28 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
     _.validate[A].asEither.left.map(e => BadRequest(JsError.toJson(e)))
   )
 
+  def withoutTimestamps(r: models.Recipe): models.Recipe = models.Recipe(
+    r.id,
+    r.title,
+    r.making_time,
+    r.serves,
+    r.ingredients,
+    r.cost,
+    None,
+    None)
+
+  def withoutId(r: models.Recipe): models.Recipe = models.Recipe(
+    None,
+    r.title,
+    r.making_time,
+    r.serves,
+    r.ingredients,
+    r.cost,
+    r.created_at,
+    r.updated_at)
+
+  // TODO: Remove the validateJson because caller expects a 200 response even on
+  // invalid request.
   def createRecipe() = Action.async(validateJson[models.Recipe]) {
     request => {
       val id: Future[Long] = recipeService.create(request.body)
@@ -59,7 +86,7 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
 
   def listRecipes() = Action.async {
     recipeService.list().map(rs => Ok(Json.obj(
-      "recipes" -> rs
+      "recipes" -> rs.map(withoutTimestamps)
     ).toString()))
   }
 
@@ -68,18 +95,28 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
       _.map(
         r => Ok(Json.obj(
           "message" -> "Recipe details by id",
-          "recipe" -> r
+          "recipe" -> withoutTimestamps(r)
         ).toString())
       ).getOrElse(NotFound)
     )
   }
 
   def updateRecipe(id: Long) = Action.async(validateJson[models.Recipe]) { request =>
-    recipeService.update(id, request.body).map(_ match {
-        case true => Ok("Bupdated!")
-        case false => NotFound
-      }
-    )
+    recipeService.update(id, request.body)
+      .map(Either.cond(_, id, NotFound))
+      .flatMap({
+        case Left(resp) => Future.successful(Left(resp))
+        case Right(id) => recipeService.get(id).map(_.toRight(InternalServerError))
+      })
+      .map(
+        _.map(
+          (r: models.Recipe) => Ok(Json.obj(
+            "message" -> "Recipe successfully updated!",
+            "recipe" -> withoutId(withoutTimestamps(r))
+          ).toString())
+        )
+        .fold(identity, identity)
+      )
   }
 
   def deleteRecipe(id: Long) = Action.async {
