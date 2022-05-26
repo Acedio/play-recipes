@@ -11,13 +11,13 @@ CREATE TABLE IF NOT EXISTS recipes (
   -- food items necessary to prepare the recipe
   ingredients varchar(300) NOT NULL,
   -- price of recipe
-  cost integer NOT NULL,
+  -- TODO: This was changed from an integer.
+  cost varchar(100) NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 INSERT INTO recipes (
-  id,
   title,
   making_time,
   serves,
@@ -27,7 +27,6 @@ INSERT INTO recipes (
   updated_at
 )
 VALUES (
-  1,
   'Chicken Curry',
   '45 min',
   '4 people',
@@ -38,7 +37,6 @@ VALUES (
 );
 
 INSERT INTO recipes (
-  id,
   title,
   making_time,
   serves,
@@ -48,7 +46,6 @@ INSERT INTO recipes (
   updated_at
 )
 VALUES (
-  2,
   'Rice Omelette',
   '30 min',
   '2 people',

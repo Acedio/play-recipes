@@ -16,7 +16,7 @@ case class Recipe(
   making_time: String,
   serves: String,
   ingredients: String,
-  cost: Long,
+  cost: String,
   created_at: Option[DateTime],
   updated_at: Option[DateTime]
 )
@@ -120,7 +120,7 @@ class InMemoryRecipeRepository @Inject()()(implicit ec: ExecutionContext) extend
       "45 min",
       "4 people",
       "onion, chicken, seasoning",
-      1000,
+      "1000",
       None,
       None
     ),
@@ -130,7 +130,7 @@ class InMemoryRecipeRepository @Inject()()(implicit ec: ExecutionContext) extend
       "30 min",
       "2 people",
       "onion, egg, seasoning, soy sauce",
-      700,
+      "700",
       None,
       None
     )
