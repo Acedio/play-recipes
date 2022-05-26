@@ -39,7 +39,6 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
     }
   }
 
-  // TODO: Add a converter that drops datetimes.
   implicit val recipeReads = Json.reads[models.Recipe]
   implicit val recipeWrites = Json.writes[models.Recipe]
 
@@ -77,7 +76,7 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
         _.map(
           r => Ok(Json.obj(
             "message" -> "Recipe successfully created!",
-            "recipe" -> r
+            "recipe" -> List(r)
           ).toString())
         ).getOrElse(InternalServerError)
       )
@@ -95,7 +94,7 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
       _.map(
         r => Ok(Json.obj(
           "message" -> "Recipe details by id",
-          "recipe" -> withoutTimestamps(r)
+          "recipe" -> List(withoutTimestamps(r))
         ).toString())
       ).getOrElse(NotFound)
     )
@@ -112,7 +111,7 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
         _.map(
           (r: models.Recipe) => Ok(Json.obj(
             "message" -> "Recipe successfully updated!",
-            "recipe" -> withoutId(withoutTimestamps(r))
+            "recipe" -> List(withoutId(withoutTimestamps(r)))
           ).toString())
         )
         .fold(identity, identity)
