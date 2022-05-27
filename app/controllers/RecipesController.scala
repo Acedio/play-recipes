@@ -70,14 +70,15 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
   // invalid request.
   def createRecipe() = Action.async(parse.json) {
     request => {
+      logger.warn(request.body.toString())
       val parsed: Option[models.Recipe] = request.body.asOpt(recipeReads)
       val recipeOr = parsed.toRight(Ok(
         Json.obj(
           "message" -> "Recipe creation failed!",
           "required" -> "title, making_time, serves, ingredients, cost"
-        ).toString()
+        )
       ))
-      recipeOr match {
+      val resp = recipeOr match {
         case Left(resp) => Future.successful(resp)
         case Right(recipe) => {
           val id: Future[Long] = recipeService.create(recipe)
@@ -87,18 +88,20 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
               r => Ok(Json.obj(
                 "message" -> "Recipe successfully created!",
                 "recipe" -> List(r)
-              ).toString())
+              ))
             ).getOrElse(InternalServerError)
           )
         }
       }
+      resp.foreach(r => logger.warn(r.body.toString()))
+      resp
     }
   }
 
   def listRecipes() = Action.async {
     recipeService.list().map(rs => Ok(Json.obj(
       "recipes" -> rs.map(withoutTimestamps)
-    ).toString()))
+    )))
   }
 
   def getRecipe(id: Long) = Action.async {
@@ -107,7 +110,7 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
         r => Ok(Json.obj(
           "message" -> "Recipe details by id",
           "recipe" -> List(withoutTimestamps(r))
-        ).toString())
+        ))
       ).getOrElse(NotFound)
     )
   }
@@ -124,7 +127,7 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
           (r: models.Recipe) => Ok(Json.obj(
             "message" -> "Recipe successfully updated!",
             "recipe" -> List(withoutId(withoutTimestamps(r)))
-          ).toString())
+          ))
         )
         .fold(identity, identity)
       )
