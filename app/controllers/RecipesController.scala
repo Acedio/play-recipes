@@ -4,6 +4,7 @@ import javax.inject._
 
 import play.api._
 import play.api.libs.json._
+import play.api.libs.functional.syntax._
 import play.api.mvc._
 
 import org.joda.time.DateTime
@@ -40,7 +41,19 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
   }
 
   implicit val recipeReads = Json.reads[models.Recipe]
-  implicit val recipeWrites = Json.writes[models.Recipe]
+
+  // Can't use an auto-generated Writes because output cost needs to be a String
+  // (and input is an int).
+  implicit val recipeWrites: Writes[models.Recipe] = (
+    (JsPath \ "id").writeNullable[Long] and
+    (JsPath \ "title").write[String] and
+    (JsPath \ "making_time").write[String] and
+    (JsPath \ "serves").write[String] and
+    (JsPath \ "ingredients").write[String] and
+    (JsPath \ "cost").write[String].contramap[Long](_.toString) and
+    (JsPath \ "created_at").writeNullable[DateTime] and
+    (JsPath \ "updated_at").writeNullable[DateTime]
+  )(unlift(models.Recipe.unapply))
 
   def validateJson[A: Reads] = parse.json.validate(
     _.validate[A].asEither.left.map(e => BadRequest(JsError.toJson(e)))

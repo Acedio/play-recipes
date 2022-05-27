@@ -11,8 +11,7 @@ CREATE TABLE IF NOT EXISTS recipes (
   -- food items necessary to prepare the recipe
   ingredients varchar(300) NOT NULL,
   -- price of recipe
-  -- TODO: This was changed from an integer.
-  cost varchar(100) NOT NULL,
+  cost integer NOT NULL,
   created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
