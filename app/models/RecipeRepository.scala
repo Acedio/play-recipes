@@ -1,14 +1,11 @@
 package models
 
-import anorm._
-
 import javax.inject._
+import org.joda.time.DateTime
 
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.joda.time.DateTime
-
-import play.api.Logger
+import anorm._
 import play.api.db.DBApi
 
 // This should be kept up to date with the `recipes` table in Recipes.sql.
@@ -39,7 +36,8 @@ trait RecipeRepository {
  * A RecipeRepository that uses a backing database to store Recipes.
  */
 @Singleton
-class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExecutionContext) extends RecipeRepository {
+class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExecutionContext)
+    extends RecipeRepository {
   private val db = dbapi.database("default")
 
   private val recipeParser: RowParser[Recipe] = Macro.namedParser[Recipe]
@@ -123,9 +121,8 @@ class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExec
  * A fake implementation of RecipeRepository for tests.
  */
 @Singleton
-class FakeRecipeRepository @Inject()()(implicit ec: ExecutionContext) extends RecipeRepository {
-  private val logger = Logger(this.getClass)
-
+class FakeRecipeRepository @Inject()()(implicit ec: ExecutionContext)
+    extends RecipeRepository {
   private val recipeList = List(
     Recipe(
       Some(1),
@@ -167,7 +164,6 @@ class FakeRecipeRepository @Inject()()(implicit ec: ExecutionContext) extends Re
 
   override def get(id: Long): Future[Option[Recipe]] = {
     Future {
-      logger.info("here!")
       recipeList.find(recipe => recipe.id == Some(id))
     }
   }

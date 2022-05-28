@@ -1,30 +1,26 @@
 package controllers
 
 import javax.inject._
+import org.joda.time.DateTime
+import org.joda.time.format.DateTimeFormat
+
+import scala.concurrent.{ExecutionContext, Future}
 
 import play.api._
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
 import play.api.mvc._
 
-import org.joda.time.DateTime
-import org.joda.time.format.DateTimeFormat
-
-import scala.concurrent.{ExecutionContext, Future}
-
 import models._
 
 /**
- * This controller creates an `Action` to handle HTTP requests to the
- * application's home page.
+ * This controller handles requests to create, list, and modify Recipes.
  */
 @Singleton
 // TODO: val for recipeService? No val for controllerComponents?
 class RecipesController @Inject()(recipeService: RecipeRepository, 
                                   val controllerComponents: ControllerComponents)(implicit ec: ExecutionContext)
     extends BaseController {
-  val logger = Logger(this.getClass())
-
   // TODO: Check again to see if there's a built in formatter for JodaTime.
   implicit val dateTimeFormat = new Format[DateTime] {
     val DateFormat: String = "yyyy-MM-dd HH:mm:ss"
@@ -61,17 +57,7 @@ class RecipesController @Inject()(recipeService: RecipeRepository,
 
   implicit val recipeFormat: Format[Recipe] = Format(recipeReads, recipeWrites)
 
-  // Spec requires returning 200 SUCCESS (with an error message) on a parse
-  // error.
-  def validateRecipe = parse.json.validate(
-    _.validate[Recipe].asEither.left.map(e => Ok(
-      Json.obj(
-        "message" -> "Recipe creation failed!",
-        "required" -> "title, making_time, serves, ingredients, cost"
-      )
-    ))
-  )
-
+  // Utility transformers to adapt Recipes to fit per-method differences.
   def withoutTimestamps(r: Recipe): Recipe = Recipe(
     r.id,
     r.title,
@@ -92,35 +78,46 @@ class RecipesController @Inject()(recipeService: RecipeRepository,
     r.created_at,
     r.updated_at)
 
-  // This doesn't use validateJson because caller expects a 200 response even on
-  // invalid request.
+  // The spec says we should return 200 SUCCESS for all endpoints, and indeed
+  // the tests expect us to return 200 in the invalid request case. Use `error`
+  // to signify in the code where the error cases are in case this isn't
+  // actually desired.
+  def error(message: String): Result = Ok(Json.obj("message" -> message))
+
+  // Could use a custom BodyParser for POST and UPDATE, but since the response
+  // behavior varies we implement it per-method.
   def createRecipe() = Action.async(parse.json) {
     request => {
-      logger.warn(request.body.toString())
-      val parsed: Option[Recipe] = request.body.asOpt(recipeReads)
-      val parsedOr: Either[Result, Recipe] = parsed.toRight(Ok(
-        Json.obj(
-          "message" -> "Recipe creation failed!",
-          "required" -> "title, making_time, serves, ingredients, cost"
-        )
-      ))
-      val resp = parsedOr match {
-        case Left(resp) => Future.successful(resp)
-        case Right(recipe) => {
-          val id: Future[Long] = recipeService.create(recipe)
-          val createdRecipe: Future[Option[Recipe]] = id.flatMap(id => recipeService.get(id))
-          createdRecipe.map(
-            _.map(
-              r => Ok(Json.obj(
-                "message" -> "Recipe successfully created!",
-                "recipe" -> List(r)
-              ))
-            ).getOrElse(InternalServerError)
+      // Check that all required fields exist.
+      val parsedOr: Either[Result, Recipe] =
+        // Tests require a 200 SUCCESS here rather than a 400 INVALID REQUEST.
+        request.body.asOpt(recipeReads).toRight(Ok(
+          Json.obj(
+            "message" -> "Recipe creation failed!",
+            "required" -> "title, making_time, serves, ingredients, cost"
           )
-        }
+        ))
+      // Create the recipe.
+      val idOr: Future[Either[Result, Long]] = parsedOr match {
+        case Left(result) => Future.successful(Left(result))
+        case Right(recipe) => recipeService.create(recipe).map(Right(_))
       }
-      resp.foreach(r => logger.warn(r.body.toString()))
-      resp
+      // If successful, fetch the created recipe.
+      val recipeOr: Future[Either[Result, Recipe]] = idOr
+        .flatMap(_ match {
+          case Left(result) => Future.successful(Left(result))
+          case Right(id) => recipeService.get(id).map(_.toRight(
+            error("Recipe was unexpectedly missing")
+          ))
+        })
+      // Format the response.
+      recipeOr.map(_.fold(
+        identity,
+        r => Ok(Json.obj(
+          "message" -> "Recipe successfully created!",
+          "recipe" -> List(r)
+        ))
+      ))
     }
   }
 
@@ -137,39 +134,48 @@ class RecipesController @Inject()(recipeService: RecipeRepository,
           "message" -> "Recipe details by id",
           "recipe" -> List(withoutTimestamps(r))
         ))
-      ).getOrElse(NotFound)
+      ).getOrElse(error("No recipe found"))
     )
   }
 
-  def updateRecipe(id: Long) = Action.async(validateRecipe) {
+  def updateRecipe(id: Long) = Action.async(parse.json) {
     request => {
-      val wasUpdated: Future[Boolean] = recipeService.update(id, request.body)
-      // If the update succeeded, go and grab the updated Recipe.
-      val recipeOr: Future[Either[Result, Recipe]] = wasUpdated
-        .map(Either.cond(_, id, NotFound))
-        .flatMap({
-          case Left(resp) => Future.successful(Left(resp))
-          case Right(id) => recipeService.get(id).map(_.toRight(InternalServerError))
+      // Check that all required fields exist.
+      val parsedOr: Either[Result, Recipe] =
+        request.body.asOpt(recipeReads).toRight(Ok(
+          Json.obj(
+            "message" -> "Recipe update failed!",
+            "required" -> "title, making_time, serves, ingredients, cost"
+          )
+        ))
+      val idOr: Future[Either[Result, Long]] = parsedOr match {
+        case Left(result) => Future.successful(Left(result))
+        case Right(recipe) => recipeService.update(id, recipe)
+          .map(Either.cond(_, id, error("No recipe found")))
+      }
+      // If successful, fetch the updated recipe.
+      val recipeOr: Future[Either[Result, Recipe]] = idOr
+        .flatMap(_ match {
+          case Left(result) => Future.successful(Left(result))
+          case Right(id) => recipeService.get(id).map(_.toRight(
+            error("Recipe was unexpectedly missing")
+          ))
         })
       // Format the response.
-      recipeOr.map(
-        _.map(
-          (r: Recipe) => Ok(Json.obj(
-            "message" -> "Recipe successfully updated!",
-            "recipe" -> List(withoutId(withoutTimestamps(r)))
-          ))
-        )
-        .fold(identity, identity)
-      )
+      recipeOr.map(_.fold(
+        identity,
+        r => Ok(Json.obj(
+          "message" -> "Recipe successfully updated!",
+          "recipe" -> List(withoutId(withoutTimestamps(r)))
+        ))
+      ))
     }
   }
 
   def deleteRecipe(id: Long) = Action.async {
     recipeService.delete(id).map(
-      _ match {
-        case true => Ok(Json.obj("message" -> "Recipe successfully removed!"))
-        case false => NotFound(Json.obj("message" -> "No recipe found"))
-      }
+      if (_) Ok(Json.obj("message" -> "Recipe successfully removed!"))
+      else error("No recipe found")
     )
   }
 }
