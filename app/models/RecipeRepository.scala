@@ -1,15 +1,17 @@
 package models
 
+import anorm._
+
 import javax.inject._
-import org.joda.time.DateTime
 
 import scala.concurrent.{ExecutionContext, Future}
+
+import org.joda.time.DateTime
 
 import play.api.Logger
 import play.api.db.DBApi
 
-import anorm._
-
+// This should be kept up to date with the `recipes` table in Recipes.sql.
 case class Recipe(
   id: Option[Long],
   title: String,
@@ -21,96 +23,107 @@ case class Recipe(
   updated_at: Option[DateTime]
 )
 
+/**
+ * Represents an asyncronously accessible store of Recipes.
+ */
 trait RecipeRepository {
   def create(recipe: Recipe) : Future[Long]
+  // TODO: Potentially Future[Unit] since Future already represents failure.
   def update(id: Long, recipe: Recipe) : Future[Boolean]
   def list(): Future[Iterable[Recipe]]
   def get(id: Long) : Future[Option[Recipe]]
   def delete(id: Long) : Future[Boolean]
 }
 
+/**
+ * A RecipeRepository that uses a backing database to store Recipes.
+ */
 @Singleton
 class DatabaseRecipeRepository @Inject()(dbapi: DBApi)(implicit ec: DatabaseExecutionContext) extends RecipeRepository {
   private val db = dbapi.database("default")
+
+  private val recipeParser: RowParser[Recipe] = Macro.namedParser[Recipe]
 
   override def create(recipe: Recipe): Future[Long] = {
     Future {
       db.withConnection {
         implicit connection =>
-          SQL(
-            """
+          // TODO: This should be able to return failure.
+          SQL"""
             INSERT INTO recipes(title, making_time, serves, ingredients, cost)
-            VALUES ({title}, {making_time}, {serves}, {ingredients}, {cost})
-            """
-          )
-            .on("title" -> recipe.title,
-                "making_time" -> recipe.making_time,
-                "serves" -> recipe.serves,
-                "ingredients" -> recipe.ingredients,
-                "cost" -> recipe.cost)
-            .executeInsert().getOrElse(-1)
+            VALUES (${recipe.title},
+                    ${recipe.making_time},
+                    ${recipe.serves},
+                    ${recipe.ingredients},
+                    ${recipe.cost})
+          """.executeInsert().getOrElse(-1)
       }
     }
   }
+
   override def update(id: Long, recipe: Recipe) : Future[Boolean] = {
     Future {
       db.withConnection {
         implicit connection =>
-          SQL(
-            """
+          SQL"""
             UPDATE recipes
-            SET title = {title},
-                making_time = {making_time},
-                serves = {serves},
-                ingredients = {ingredients},
-                cost = {cost}
-            WHERE id = {id}
-            """
-          )
-            .on("id" -> id,
-                "title" -> recipe.title,
-                "making_time" -> recipe.making_time,
-                "serves" -> recipe.serves,
-                "ingredients" -> recipe.ingredients,
-                "cost" -> recipe.cost)
-            .executeUpdate() == 1
+            SET title       = ${recipe.title},
+                making_time = ${recipe.making_time},
+                serves      = ${recipe.serves},
+                ingredients = ${recipe.ingredients},
+                cost        = ${recipe.cost},
+                updated_at  = CURRENT_TIMESTAMP
+            WHERE id = $id
+          """.executeUpdate() == 1
       }
     }
   }
+
   override def list(): Future[Iterable[Recipe]] = {
     Future {
       db.withConnection {
         implicit connection => {
-          val parser: RowParser[Recipe] = Macro.namedParser[Recipe]
-          SQL"SELECT id, title, making_time, serves, ingredients, cost, created_at, updated_at FROM recipes".as(parser.*)
+          SQL"""
+            SELECT id, title, making_time, serves, ingredients, cost, created_at, updated_at
+            FROM recipes
+          """.as(recipeParser.*)
         }
       }
     }
   }
+
   override def get(id: Long): Future[Option[Recipe]] = {
     Future {
       db.withConnection {
         implicit connection => {
-          val parser: RowParser[Recipe] = Macro.namedParser[Recipe]
-          val result: List[Recipe] = SQL"SELECT id, title, making_time, serves, ingredients, cost, created_at, updated_at FROM recipes WHERE id = $id".as(parser.*)
+          val result: List[Recipe] = SQL"""
+            SELECT id, title, making_time, serves, ingredients, cost, created_at, updated_at
+            FROM recipes
+            WHERE id = $id
+          """.as(recipeParser.*)
           result.headOption
         }
       }
     }
   }
+
   override def delete(id: Long): Future[Boolean] = {
     Future {
       db.withConnection {
         implicit connection => {
-          SQL("DELETE FROM recipes WHERE id = {id}").on("id" -> id).executeUpdate() == 1
+          SQL"DELETE FROM recipes WHERE id = $id"
+            .executeUpdate() >= 1
         }
       }
     }
   }
 }
 
+/**
+ * A fake implementation of RecipeRepository for tests.
+ */
 @Singleton
-class InMemoryRecipeRepository @Inject()()(implicit ec: ExecutionContext) extends RecipeRepository {
+class FakeRecipeRepository @Inject()()(implicit ec: ExecutionContext) extends RecipeRepository {
   private val logger = Logger(this.getClass)
 
   private val recipeList = List(
@@ -139,22 +152,26 @@ class InMemoryRecipeRepository @Inject()()(implicit ec: ExecutionContext) extend
   override def create(recipe: Recipe): Future[Long] = {
     Future { 1 }
   }
+
   override def update(id: Long, recipe: Recipe) : Future[Boolean] = {
     Future {
       false
     }
   }
+
   override def list(): Future[Iterable[Recipe]] = {
     Future {
       recipeList
     }
   }
+
   override def get(id: Long): Future[Option[Recipe]] = {
     Future {
       logger.info("here!")
       recipeList.find(recipe => recipe.id == Some(id))
     }
   }
+
   override def delete(id: Long): Future[Boolean] = {
     Future {
       false
