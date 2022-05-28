@@ -12,17 +12,21 @@ import org.joda.time.format.DateTimeFormat
 
 import scala.concurrent.{ExecutionContext, Future}
 
+import models._
+
 /**
  * This controller creates an `Action` to handle HTTP requests to the
  * application's home page.
  */
 @Singleton
-class RecipesController @Inject()(recipeService: models.RecipeRepository, 
+// TODO: val for recipeService? No val for controllerComponents?
+class RecipesController @Inject()(recipeService: RecipeRepository, 
                                   val controllerComponents: ControllerComponents)(implicit ec: ExecutionContext)
     extends BaseController {
   val logger = Logger(this.getClass())
 
-  implicit val dateTimeReads = new Format[DateTime] {
+  // TODO: Check again to see if there's a built in formatter for JodaTime.
+  implicit val dateTimeFormat = new Format[DateTime] {
     val DateFormat: String = "yyyy-MM-dd HH:mm:ss"
 
     def writes(dt: DateTime): JsValue =
@@ -40,11 +44,11 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
     }
   }
 
-  implicit val recipeReads = Json.reads[models.Recipe]
+  val recipeReads = Json.reads[Recipe]
 
   // Can't use an auto-generated Writes because output cost needs to be a String
-  // (and input is an int).
-  implicit val recipeWrites: Writes[models.Recipe] = (
+  // (while input and storage use integers).
+  val recipeWrites: Writes[Recipe] = (
     (JsPath \ "id").writeNullable[Long] and
     (JsPath \ "title").write[String] and
     (JsPath \ "making_time").write[String] and
@@ -53,13 +57,22 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
     (JsPath \ "cost").write[String].contramap[Long](_.toString) and
     (JsPath \ "created_at").writeNullable[DateTime] and
     (JsPath \ "updated_at").writeNullable[DateTime]
-  )(unlift(models.Recipe.unapply))
+  )(unlift(Recipe.unapply))
 
-  def validateJson[A: Reads] = parse.json.validate(
-    _.validate[A].asEither.left.map(e => BadRequest(JsError.toJson(e)))
+  implicit val recipeFormat: Format[Recipe] = Format(recipeReads, recipeWrites)
+
+  // Spec requires returning 200 SUCCESS (with an error message) on a parse
+  // error.
+  def validateRecipe = parse.json.validate(
+    _.validate[Recipe].asEither.left.map(e => Ok(
+      Json.obj(
+        "message" -> "Recipe creation failed!",
+        "required" -> "title, making_time, serves, ingredients, cost"
+      )
+    ))
   )
 
-  def withoutTimestamps(r: models.Recipe): models.Recipe = models.Recipe(
+  def withoutTimestamps(r: Recipe): Recipe = Recipe(
     r.id,
     r.title,
     r.making_time,
@@ -69,7 +82,7 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
     None,
     None)
 
-  def withoutId(r: models.Recipe): models.Recipe = models.Recipe(
+  def withoutId(r: Recipe): Recipe = Recipe(
     None,
     r.title,
     r.making_time,
@@ -84,18 +97,18 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
   def createRecipe() = Action.async(parse.json) {
     request => {
       logger.warn(request.body.toString())
-      val parsed: Option[models.Recipe] = request.body.asOpt(recipeReads)
-      val recipeOr = parsed.toRight(Ok(
+      val parsed: Option[Recipe] = request.body.asOpt(recipeReads)
+      val parsedOr: Either[Result, Recipe] = parsed.toRight(Ok(
         Json.obj(
           "message" -> "Recipe creation failed!",
           "required" -> "title, making_time, serves, ingredients, cost"
         )
       ))
-      val resp = recipeOr match {
+      val resp = parsedOr match {
         case Left(resp) => Future.successful(resp)
         case Right(recipe) => {
           val id: Future[Long] = recipeService.create(recipe)
-          val createdRecipe: Future[Option[models.Recipe]] = id.flatMap(id => recipeService.get(id))
+          val createdRecipe: Future[Option[Recipe]] = id.flatMap(id => recipeService.get(id))
           createdRecipe.map(
             _.map(
               r => Ok(Json.obj(
@@ -128,26 +141,32 @@ class RecipesController @Inject()(recipeService: models.RecipeRepository,
     )
   }
 
-  def updateRecipe(id: Long) = Action.async(validateJson[models.Recipe]) { request =>
-    recipeService.update(id, request.body)
-      .map(Either.cond(_, id, NotFound))
-      .flatMap({
-        case Left(resp) => Future.successful(Left(resp))
-        case Right(id) => recipeService.get(id).map(_.toRight(InternalServerError))
-      })
-      .map(
+  def updateRecipe(id: Long) = Action.async(validateRecipe) {
+    request => {
+      val wasUpdated: Future[Boolean] = recipeService.update(id, request.body)
+      // If the update succeeded, go and grab the updated Recipe.
+      val recipeOr: Future[Either[Result, Recipe]] = wasUpdated
+        .map(Either.cond(_, id, NotFound))
+        .flatMap({
+          case Left(resp) => Future.successful(Left(resp))
+          case Right(id) => recipeService.get(id).map(_.toRight(InternalServerError))
+        })
+      // Format the response.
+      recipeOr.map(
         _.map(
-          (r: models.Recipe) => Ok(Json.obj(
+          (r: Recipe) => Ok(Json.obj(
             "message" -> "Recipe successfully updated!",
             "recipe" -> List(withoutId(withoutTimestamps(r)))
           ))
         )
         .fold(identity, identity)
       )
+    }
   }
 
   def deleteRecipe(id: Long) = Action.async {
-    recipeService.delete(id).map(_ match {
+    recipeService.delete(id).map(
+      _ match {
         case true => Ok(Json.obj("message" -> "Recipe successfully removed!"))
         case false => NotFound(Json.obj("message" -> "No recipe found"))
       }
