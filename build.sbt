@@ -10,6 +10,7 @@ scalaVersion := "2.13.8"
 libraryDependencies ++= Seq(
   evolutions,
   guice,
+  "org.scalatestplus" %% "mockito-3-4" % "3.2.10.0" % Test,
   "org.scalatestplus.play" %% "scalatestplus-play" % "5.0.0" % Test,
   jdbc,
   "org.postgresql" % "postgresql" % "9.4-1201-jdbc41",

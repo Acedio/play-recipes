@@ -6,7 +6,7 @@ import org.joda.time.format.DateTimeFormat
 import play.api.libs.functional.syntax._
 import play.api.libs.json._
 
-// This should be kept up to date with the `recipes` table in Recipes.sql.
+// This should be kept up to date with the `recipes` table in 1.sql.
 case class Recipe(
     id: Option[Long],
     title: String,
