@@ -17,7 +17,6 @@ import models._
  * This controller handles requests to create, list, and modify Recipes.
  */
 @Singleton
-// TODO: val for recipeService? No val for controllerComponents?
 class RecipesController @Inject()(recipeService: RecipeRepository, 
                                   val controllerComponents: ControllerComponents)(implicit ec: ExecutionContext)
     extends BaseController {
@@ -40,22 +39,24 @@ class RecipesController @Inject()(recipeService: RecipeRepository,
     }
   }
 
-  val recipeReads = Json.reads[Recipe]
+  implicit val recipeFormat: Format[Recipe] = {
+    val recipeReads = Json.reads[Recipe]
 
-  // Can't use an auto-generated Writes because output cost needs to be a String
-  // (while input and storage use integers).
-  val recipeWrites: Writes[Recipe] = (
-    (JsPath \ "id").writeNullable[Long] and
-    (JsPath \ "title").write[String] and
-    (JsPath \ "making_time").write[String] and
-    (JsPath \ "serves").write[String] and
-    (JsPath \ "ingredients").write[String] and
-    (JsPath \ "cost").write[String].contramap[Long](_.toString) and
-    (JsPath \ "created_at").writeNullable[DateTime] and
-    (JsPath \ "updated_at").writeNullable[DateTime]
-  )(unlift(Recipe.unapply))
+    // Can't use an auto-generated Writes because output cost needs to be a
+    // String (while input and storage use integers).
+    val recipeWrites: Writes[Recipe] = (
+      (JsPath \ "id").writeNullable[Long] and
+      (JsPath \ "title").write[String] and
+      (JsPath \ "making_time").write[String] and
+      (JsPath \ "serves").write[String] and
+      (JsPath \ "ingredients").write[String] and
+      (JsPath \ "cost").write[String].contramap[Long](_.toString) and
+      (JsPath \ "created_at").writeNullable[DateTime] and
+      (JsPath \ "updated_at").writeNullable[DateTime]
+    )(unlift(Recipe.unapply))
 
-  implicit val recipeFormat: Format[Recipe] = Format(recipeReads, recipeWrites)
+    Format(recipeReads, recipeWrites)
+  }
 
   // Utility transformers to adapt Recipes to fit per-method differences.
   def withoutTimestamps(r: Recipe): Recipe = Recipe(
@@ -91,7 +92,7 @@ class RecipesController @Inject()(recipeService: RecipeRepository,
       // Check that all required fields exist.
       val parsedOr: Either[Result, Recipe] =
         // Tests require a 200 SUCCESS here rather than a 400 INVALID REQUEST.
-        request.body.asOpt(recipeReads).toRight(Ok(
+        request.body.asOpt[Recipe].toRight(Ok(
           Json.obj(
             "message" -> "Recipe creation failed!",
             "required" -> "title, making_time, serves, ingredients, cost"
@@ -142,7 +143,7 @@ class RecipesController @Inject()(recipeService: RecipeRepository,
     request => {
       // Check that all required fields exist.
       val parsedOr: Either[Result, Recipe] =
-        request.body.asOpt(recipeReads).toRight(Ok(
+        request.body.asOpt[Recipe].toRight(Ok(
           Json.obj(
             "message" -> "Recipe update failed!",
             "required" -> "title, making_time, serves, ingredients, cost"
