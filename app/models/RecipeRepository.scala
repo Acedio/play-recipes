@@ -8,18 +8,6 @@ import scala.concurrent.{ExecutionContext, Future}
 import anorm._
 import play.api.db.DBApi
 
-// This should be kept up to date with the `recipes` table in Recipes.sql.
-case class Recipe(
-    id: Option[Long],
-    title: String,
-    making_time: String,
-    serves: String,
-    ingredients: String,
-    cost: Long,
-    created_at: Option[DateTime],
-    updated_at: Option[DateTime]
-)
-
 /** Represents an asyncronously accessible store of Recipes.
   */
 trait RecipeRepository {
