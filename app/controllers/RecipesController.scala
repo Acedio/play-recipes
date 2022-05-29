@@ -7,6 +7,7 @@ import org.joda.time.format.DateTimeFormat
 import scala.concurrent.{ExecutionContext, Future}
 
 import play.api._
+import play.api.cache.Cached
 import play.api.libs.json._
 import play.api.libs.functional.syntax._
 import play.api.mvc._
@@ -18,6 +19,7 @@ import models._
 @Singleton
 class RecipesController @Inject() (
     recipeService: RecipeRepository,
+    cached: Cached,
     val controllerComponents: ControllerComponents
 )(implicit ec: ExecutionContext)
     extends BaseController {
@@ -141,31 +143,35 @@ class RecipesController @Inject() (
     }
   }
 
-  def listRecipes() = Action.async {
-    recipeService
-      .list()
-      .map(rs =>
-        Ok(
-          Json.obj(
-            "recipes" -> rs.map(withoutTimestamps)
-          )
-        )
-      )
-  }
-
-  def getRecipe(id: Long) = Action.async {
-    recipeService
-      .get(id)
-      .map(
-        _.map(r =>
+  def listRecipes() = cached("recipeList") {
+    Action.async {
+      recipeService
+        .list()
+        .map(rs =>
           Ok(
             Json.obj(
-              "message" -> "Recipe details by id",
-              "recipe" -> List(withoutTimestamps(r))
+              "recipes" -> rs.map(withoutTimestamps)
             )
           )
-        ).getOrElse(error("No recipe found"))
-      )
+        )
+    }
+  }
+
+  def getRecipe(id: Long) = cached.status(_ => "/recipe/" + id, 200) {
+    Action.async {
+      recipeService
+        .get(id)
+        .map(
+          _.map(r =>
+            Ok(
+              Json.obj(
+                "message" -> "Recipe details by id",
+                "recipe" -> List(withoutTimestamps(r))
+              )
+            )
+          ).getOrElse(error("No recipe found"))
+        )
+    }
   }
 
   def updateRecipe(id: Long) = Action.async(parse.json) { request =>
