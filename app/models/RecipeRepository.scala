@@ -23,7 +23,7 @@ case class Recipe(
 /** Represents an asyncronously accessible store of Recipes.
   */
 trait RecipeRepository {
-  def create(recipe: Recipe): Future[Long]
+  def create(recipe: Recipe): Future[Option[Long]]
   // TODO: Potentially Future[Unit] since Future already represents failure.
   def update(id: Long, recipe: Recipe): Future[Boolean]
   def list(): Future[Iterable[Recipe]]
@@ -41,10 +41,9 @@ class DatabaseRecipeRepository @Inject() (dbapi: DBApi)(implicit
 
   private val recipeParser: RowParser[Recipe] = Macro.namedParser[Recipe]
 
-  override def create(recipe: Recipe): Future[Long] = {
+  override def create(recipe: Recipe): Future[Option[Long]] = {
     Future {
       db.withConnection { implicit connection =>
-        // TODO: This should be able to return failure.
         SQL"""
             INSERT INTO recipes(title, making_time, serves, ingredients, cost)
             VALUES (${recipe.title},
@@ -52,7 +51,7 @@ class DatabaseRecipeRepository @Inject() (dbapi: DBApi)(implicit
                     ${recipe.serves},
                     ${recipe.ingredients},
                     ${recipe.cost})
-          """.executeInsert().getOrElse(-1)
+          """.executeInsert()
       }
     }
   }
@@ -142,8 +141,8 @@ class FakeRecipeRepository @Inject() ()(implicit ec: ExecutionContext)
     )
   )
 
-  override def create(recipe: Recipe): Future[Long] = {
-    Future { 1 }
+  override def create(recipe: Recipe): Future[Option[Long]] = {
+    Future { Some(1) }
   }
 
   override def update(id: Long, recipe: Recipe): Future[Boolean] = {

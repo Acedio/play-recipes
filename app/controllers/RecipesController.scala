@@ -109,8 +109,13 @@ class RecipesController @Inject() (
           )
       // Create the recipe.
       val idOr: Future[Either[Result, Long]] = parsedOr match {
-        case Left(result)  => Future.successful(Left(result))
-        case Right(recipe) => recipeService.create(recipe).map(Right(_))
+        case Left(result) => Future.successful(Left(result))
+        case Right(recipe) =>
+          recipeService
+            .create(recipe)
+            .map(
+              _.toRight(error("Could not create recipe."))
+            )
       }
       // If successful, fetch the created recipe.
       val recipeOr: Future[Either[Result, Recipe]] = idOr
